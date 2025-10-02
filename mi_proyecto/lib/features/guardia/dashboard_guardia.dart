@@ -1,13 +1,14 @@
+// lib/features/guardia/dashboard_guardia.dart
 import 'package:flutter/material.dart';
 
 import 'visitantes_page.dart';
 import 'visitante_form.dart';
 import 'placas_page.dart';
-import 'camaras_page.dart';
 import 'alertas_page.dart';
 import 'incidente_form.dart';
 import 'qr_access_page.dart';
 import 'PerfilGuardiaPage.dart';
+import 'face_auth_page.dart'; // <-- ajusta la ruta real
 
 class DashboardGuardia extends StatefulWidget {
   const DashboardGuardia({super.key});
@@ -18,30 +19,45 @@ class DashboardGuardia extends StatefulWidget {
 class _DashboardGuardiaState extends State<DashboardGuardia> {
   int _index = 0;
 
+  // Usamos IndexedStack para preservar el estado de cada tab (cámara, scroll, etc.)
+  late final List<Widget> _pages = <Widget>[
+    _HomeTab(goToTab: (i) => setState(() => _index = i)), // 0
+    const VisitantesPage(), // 1
+    FaceSearchMiniPage(), // 2 (sin const para evitar problemas si el ctor no es const)
+    const NotificacionesPage(), // 3
+    const _QrHubPage(), // 4
+    const PerfilGuardiaPage(), // 5
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      _HomeTab(goToTab: (i) => setState(() => _index = i)),
-      const VisitantesPage(),
-      const CamarasPage(),
-      const AlertasPage(),
-      const _QrHubPage(),
-         const PerfilGuardiaPage(),
-    ];
-
     return Scaffold(
-      body: pages[_index],
+      body: IndexedStack(index: _index, children: _pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Inicio'),
-          NavigationDestination(icon: Icon(Icons.badge_outlined), label: 'Visitantes'),
-          NavigationDestination(icon: Icon(Icons.videocam_outlined), label: 'Cámaras'),
-          NavigationDestination(icon: Icon(Icons.notifications_active_outlined), label: 'Alertas'),
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            label: 'Inicio',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.badge_outlined),
+            label: 'Visitantes',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.face_retouching_natural),
+            label: 'Rostro',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.notifications_active_outlined),
+            label: 'Alertas',
+          ),
           NavigationDestination(icon: Icon(Icons.qr_code_2), label: 'QR'),
-                    NavigationDestination(icon: Icon(Icons.person_outline), label: 'Perfil'),
-
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            label: 'Perfil',
+          ),
         ],
       ),
     );
@@ -58,18 +74,35 @@ class _HomeTab extends StatelessWidget {
     final items = [
       _Item('Control de Visitantes', Icons.badge_outlined, () => goToTab(1)),
       _Item('Registrar Ingreso', Icons.person_add_alt_1_outlined, () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const VisitanteFormPage()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const VisitanteFormPage()),
+        );
       }),
       _Item('Validar Placa', Icons.directions_car_filled_outlined, () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const PlacasPage()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const PlacasPage()),
+        );
       }),
-      _Item('Cámaras IA', Icons.videocam_outlined, () => goToTab(2)),
-      _Item('Alertas tiempo real', Icons.notifications_active_outlined, () => goToTab(3)),
+      _Item(
+        'Rostro (Auth/Búsqueda)',
+        Icons.face_retouching_natural,
+        () => goToTab(2),
+      ),
+      _Item(
+        'Alertas tiempo real',
+        Icons.notifications_active_outlined,
+        () => goToTab(3),
+      ),
       _Item('Reporte de Incidente', Icons.report_gmailerrorred_outlined, () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const IncidenteFormPage()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const IncidenteFormPage()),
+        );
       }),
       _Item('Escanear QR', Icons.qr_code_scanner, () => goToTab(4)),
-      _Item('Datos y sesion', Icons.person_outline, () => goToTab(5)),
+      _Item('Datos y sesión', Icons.person_outline, () => goToTab(5)),
     ];
 
     return SafeArea(
@@ -78,7 +111,10 @@ class _HomeTab extends StatelessWidget {
         child: GridView.builder(
           itemCount: items.length,
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 1.1,
+            crossAxisCount: 2,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 1.1,
           ),
           itemBuilder: (_, i) => _CardItem(item: items[i], cs: cs),
         ),
@@ -108,15 +144,28 @@ class _CardItem extends StatelessWidget {
         decoration: BoxDecoration(
           color: cs.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: cs.shadow.withOpacity(.08), blurRadius: 8, offset: const Offset(0, 3))],
+          boxShadow: [
+            BoxShadow(
+              color: cs.shadow.withOpacity(.08),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(item.icon, size: 36, color: cs.primary),
-            const SizedBox(height: 12),
-            Text(item.title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
-          ]),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(item.icon, size: 36, color: cs.primary),
+              const SizedBox(height: 12),
+              Text(
+                item.title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -141,7 +190,10 @@ class _QrHubPage extends StatelessWidget {
                 title: const Text('Escanear QR'),
                 subtitle: const Text('Validar entrada/salida'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const QrScanPage())),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const QrScanPage()),
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -153,7 +205,10 @@ class _QrHubPage extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const QrShowPage(code: 'ACCESO-INVITADO-12345')),
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const QrShowPage(code: 'ACCESO-INVITADO-12345'),
+                  ),
                 ),
               ),
             ),

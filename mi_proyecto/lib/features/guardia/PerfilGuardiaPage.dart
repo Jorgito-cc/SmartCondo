@@ -9,7 +9,8 @@ import '../auth/login_page.dart';
 import '../guardia/qr_access_page.dart';
 import '../guardia/alertas_page.dart';
 
-const String kBaseUrl = 'https://backend-condominio-production.up.railway.app/api';
+const String kBaseUrl =
+    'https://backend-condominio-production.up.railway.app/api';
 
 class PerfilGuardiaPage extends StatefulWidget {
   const PerfilGuardiaPage({super.key});
@@ -29,17 +30,16 @@ class _PerfilGuardiaPageState extends State<PerfilGuardiaPage> {
   Future<_AppUser> _fetchProfile() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token');
-    if (token == null) throw Exception('No hay token. Inicia sesión nuevamente.');
+    if (token == null)
+      throw Exception('No hay token. Inicia sesión nuevamente.');
 
     final res = await http.get(
       Uri.parse('$kBaseUrl/usuarios/me/'),
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'},
     );
 
-    if (res.statusCode == 401) throw Exception('Sesión expirada (401). Inicia sesión otra vez.');
+    if (res.statusCode == 401)
+      throw Exception('Sesión expirada (401). Inicia sesión otra vez.');
     if (res.statusCode < 200 || res.statusCode >= 300) {
       String msg = 'Error ${res.statusCode}';
       try {
@@ -89,23 +89,27 @@ class _PerfilGuardiaPageState extends State<PerfilGuardiaPage> {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.error_outline, size: 36),
-                  const SizedBox(height: 8),
-                  Text(snap.error.toString(), textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: _refresh,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Reintentar'),
-                  ),
-                ]),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 36),
+                    const SizedBox(height: 8),
+                    Text(snap.error.toString(), textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: _refresh,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Reintentar'),
+                    ),
+                  ],
+                ),
               ),
             );
           }
 
           final u = snap.data!;
-          final fullName = (('${u.firstName ?? ''} ${u.lastName ?? ''}').trim()).isEmpty
+          final fullName =
+              (('${u.firstName ?? ''} ${u.lastName ?? ''}').trim()).isEmpty
               ? (u.username ?? '')
               : ('${u.firstName ?? ''} ${u.lastName ?? ''}').trim();
 
@@ -124,18 +128,29 @@ class _PerfilGuardiaPageState extends State<PerfilGuardiaPage> {
                         : null,
                     onBackgroundImageError: (_, __) {},
                     child: (u.urlImg == null || u.urlImg!.isEmpty)
-                        ? const Icon(Icons.security, size: 48) // ícono distinto para guardia
+                        ? const Icon(
+                            Icons.security,
+                            size: 48,
+                          ) // ícono distinto para guardia
                         : null,
                   ),
                 ),
                 const SizedBox(height: 12),
-                Center(child: Text(fullName, style: Theme.of(context).textTheme.titleLarge)),
+                Center(
+                  child: Text(
+                    fullName,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Icon(Icons.shield_moon_outlined, size: 18),
                     const SizedBox(width: 6),
-                    Text(u.rolNombre ?? 'GUARDIA', style: Theme.of(context).textTheme.bodyMedium),
+                    Text(
+                      u.rolNombre ?? 'GUARDIA',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -153,7 +168,9 @@ class _PerfilGuardiaPageState extends State<PerfilGuardiaPage> {
                 ListTile(
                   leading: const Icon(Icons.phone_outlined),
                   title: const Text('Teléfono'),
-                  subtitle: Text((u.telefono ?? '').isEmpty ? '-' : u.telefono!),
+                  subtitle: Text(
+                    (u.telefono ?? '').isEmpty ? '-' : u.telefono!,
+                  ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.badge_outlined),
@@ -171,20 +188,25 @@ class _PerfilGuardiaPageState extends State<PerfilGuardiaPage> {
 
                 // Accesos rápidos (opcionales)
                 Wrap(
-                  spacing: 12, runSpacing: 12,
+                  spacing: 12,
+                  runSpacing: 12,
                   children: [
                     _QuickAction(
                       icon: Icons.qr_code_scanner,
                       label: 'Escanear QR',
                       onTap: () => Navigator.push(
-                        context, MaterialPageRoute(builder: (_) => const QrScanPage()),
+                        context,
+                        MaterialPageRoute(builder: (_) => const QrScanPage()),
                       ),
                     ),
                     _QuickAction(
                       icon: Icons.notifications_active_outlined,
                       label: 'Alertas',
                       onTap: () => Navigator.push(
-                        context, MaterialPageRoute(builder: (_) => const AlertasPage()),
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NotificacionesPage(),
+                        ),
                       ),
                     ),
                   ],
@@ -207,7 +229,11 @@ class _PerfilGuardiaPageState extends State<PerfilGuardiaPage> {
 
 // Tarjetitas de acción rápida (estilo simple)
 class _QuickAction extends StatelessWidget {
-  const _QuickAction({required this.icon, required this.label, required this.onTap});
+  const _QuickAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
   final IconData icon;
   final String label;
   final VoidCallback onTap;

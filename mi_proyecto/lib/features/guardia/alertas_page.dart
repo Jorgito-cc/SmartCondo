@@ -3,188 +3,346 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-const String kBaseUrl =
+/// ============================
+/// CONFIG
+/// ============================
+const String kApiBase =
     'https://backend-condominio-production.up.railway.app/api';
 
-class AlertasPage extends StatefulWidget {
-  const AlertasPage({super.key});
-  @override
-  State<AlertasPage> createState() => _AlertasPageState();
+Map<String, String> _headers(String token) => {
+  'Accept': 'application/json',
+  'Content-Type': 'application/json',
+  'Authorization': 'Bearer $token',
+};
+
+/// ============================
+/// MODELO
+/// ============================
+class Noti {
+  final int id;
+  final String titulo;
+  final String poligono;
+  final String descripcion;
+  final DateTime creadoEn;
+  bool leido;
+
+  Noti({
+    required this.id,
+    required this.titulo,
+    required this.poligono,
+    required this.descripcion,
+    required this.creadoEn,
+    required this.leido,
+  });
+
+  factory Noti.fromJson(Map<String, dynamic> j) => Noti(
+    id: j['id'],
+    titulo: j['titulo'] ?? '',
+    poligono: j['poligono'] ?? '',
+    descripcion: j['descripcion'] ?? '',
+    creadoEn: DateTime.parse(j['creado_en']),
+    leido: j['leido'] == true,
+  );
 }
 
-class _AlertasPageState extends State<AlertasPage> {
-  late Future<List<Alerta>> _future;
+/// ============================
+/// CLIENTE HTTP
+/// ============================
+class NotiApi {
+  static Future<List<Noti>> list({
+    required String token,
+    String? search,
+    bool? leido,
+    String ordering = '-creado_en',
+  }) async {
+    final qp = <String, String>{'ordering': ordering};
+    if (search != null && search.isNotEmpty) qp['search'] = search;
+    if (leido != null) qp['leido'] = leido ? 'true' : 'false';
+
+    final uri = Uri.parse(
+      '$kApiBase/notificaciones/',
+    ).replace(queryParameters: qp);
+    final res = await http.get(uri, headers: _headers(token));
+    if (res.statusCode != 200) {
+      throw Exception('Error list: ${res.statusCode} ${res.body}');
+    }
+
+    final body = jsonDecode(res.body);
+    final list = (body is Map && body['results'] != null)
+        ? body['results']
+        : body;
+    return (list as List).map((e) => Noti.fromJson(e)).toList();
+  }
+
+  static Future<Noti> marcarLeida({
+    required String token,
+    required int id,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$kApiBase/notificaciones/$id/marcar_leida/'),
+      headers: _headers(token),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('Error marcar_leida: ${res.statusCode} ${res.body}');
+    }
+    return Noti.fromJson(jsonDecode(res.body));
+  }
+
+  static Future<Noti> marcarNoLeida({
+    required String token,
+    required int id,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$kApiBase/notificaciones/$id/marcar_no_leida/'),
+      headers: _headers(token),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('Error marcar_no_leida: ${res.statusCode} ${res.body}');
+    }
+    return Noti.fromJson(jsonDecode(res.body));
+  }
+}
+
+/// ============================
+/// UI
+/// ============================
+class NotificacionesPage extends StatefulWidget {
+  const NotificacionesPage({super.key});
+  @override
+  State<NotificacionesPage> createState() => _NotificacionesPageState();
+}
+
+class _NotificacionesPageState extends State<NotificacionesPage> {
+  final _searchCtrl = TextEditingController();
+  bool? _filtroLeido; // null = todos, true = leídos, false = no leídos
+  late Future<List<Noti>> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = _fetchAlertas();
+    _future = _fetch();
   }
 
-  Future<List<Alerta>> _fetchAlertas() async {
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<List<Noti>> _fetch() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString("auth_token");
-    if (token == null) throw Exception("No hay token.");
-
-    final uri = Uri.parse("$kBaseUrl/detecciones/");
-    final res = await http.get(
-      uri,
-      headers: {"Authorization": "Bearer $token"},
+    final token = prefs.getString('auth_token');
+    if (token == null) throw Exception('No hay token de sesión');
+    return await NotiApi.list(
+      token: token,
+      search: _searchCtrl.text.trim(),
+      leido: _filtroLeido,
     );
+  }
 
-    if (res.statusCode == 200) {
-      final List data = jsonDecode(res.body);
-      return data.map((e) => Alerta.fromJson(e)).toList();
-    } else {
-      throw Exception("Error al cargar alertas (${res.statusCode})");
+  Future<void> _refresh() async {
+    setState(() => _future = _fetch());
+    await _future;
+  }
+
+  Future<void> _toggleLeido(Noti n) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+    if (token == null) {
+      _snack('No hay token');
+      return;
+    }
+
+    try {
+      Noti actualizado;
+      if (n.leido) {
+        actualizado = await NotiApi.marcarNoLeida(token: token, id: n.id);
+      } else {
+        actualizado = await NotiApi.marcarLeida(token: token, id: n.id);
+      }
+      setState(() {
+        n.leido = actualizado.leido;
+      });
+    } catch (e) {
+      _snack('Error: $e');
     }
   }
 
-  Future<void> _confirmar(Alerta a, String estado) async {
-    // Esto es un ejemplo: depende de si quieres PATCH en tu back
-    // Aquí solo actualizamos en memoria para UI
-    setState(() {
-      a.estado = estado;
-    });
+  void _snack(String m) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
-      appBar: AppBar(title: const Text("Alertas en tiempo real")),
-      body: FutureBuilder<List<Alerta>>(
-        future: _future,
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return Center(child: Text("Error: ${snap.error}"));
-          }
-          final items = snap.data ?? [];
-          if (items.isEmpty) {
-            return const Center(child: Text("No hay alertas registradas."));
-          }
-          return RefreshIndicator(
-            onRefresh: () async {
-              setState(() => _future = _fetchAlertas());
-            },
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (_, i) {
-                final a = items[i];
-                return Card(
-                  child: ListTile(
-                    leading: Icon(
-                      Icons.warning_amber_rounded,
-                      color: cs.primary,
-                    ),
-                    title: Text(
-                      "${a.incidenciaLabel} (${(a.confianza * 100).toStringAsFixed(1)}%)",
-                    ),
-                    subtitle: Text(
-                      "${a.zona} • ${_fmt(a.fecha)} • Riesgo: ${a.nivelRiesgoLabel}",
-                    ),
-                    trailing: Wrap(
-                      spacing: 8,
-                      children: [
-                        OutlinedButton(
-                          onPressed: () => _confirmar(a, "DESCARTADA"),
-                          child: const Text("Descartar"),
+      appBar: AppBar(title: const Text('Notificaciones')),
+      body: Column(
+        children: [
+          // Barra de búsqueda + filtros
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: TextField(
+              controller: _searchCtrl,
+              decoration: InputDecoration(
+                hintText: 'Buscar (título, descripción, polígono, usuario...)',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onSubmitted: (_) => _refresh(),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                FilterChip(
+                  label: const Text('Todos'),
+                  selected: _filtroLeido == null,
+                  onSelected: (_) {
+                    setState(() => _filtroLeido = null);
+                    _refresh();
+                  },
+                ),
+                FilterChip(
+                  label: const Text('No leídos'),
+                  selected: _filtroLeido == false,
+                  onSelected: (_) {
+                    setState(() => _filtroLeido = false);
+                    _refresh();
+                  },
+                ),
+                FilterChip(
+                  label: const Text('Leídos'),
+                  selected: _filtroLeido == true,
+                  onSelected: (_) {
+                    setState(() => _filtroLeido = true);
+                    _refresh();
+                  },
+                ),
+                IconButton(
+                  tooltip: 'Buscar',
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
+          ),
+
+          // Lista
+          Expanded(
+            child: FutureBuilder<List<Noti>>(
+              future: _future,
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  return Center(child: Text('Error: ${snap.error}'));
+                }
+                final items = snap.data ?? [];
+                if (items.isEmpty) {
+                  return const Center(child: Text('Sin notificaciones.'));
+                }
+
+                return RefreshIndicator(
+                  onRefresh: _refresh,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (_, i) {
+                      final n = items[i];
+                      return Card(
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: n.leido
+                                ? cs.surfaceContainerHighest
+                                : cs.primaryContainer,
+                            child: Icon(
+                              n.leido
+                                  ? Icons.mark_email_read
+                                  : Icons.markunread,
+                              color: n.leido ? cs.secondary : cs.primary,
+                            ),
+                          ),
+                          title: Text(
+                            n.titulo,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            '${n.poligono} • ${_fmt(n.creadoEn)}\n${n.descripcion}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          isThreeLine: true,
+                          trailing: TextButton.icon(
+                            onPressed: () => _toggleLeido(n),
+                            icon: Icon(
+                              n.leido ? Icons.visibility_off : Icons.visibility,
+                            ),
+                            label: Text(
+                              n.leido ? 'Marcar no leída' : 'Marcar leída',
+                            ),
+                          ),
+                          onTap: () => _detalle(n),
                         ),
-                        ElevatedButton(
-                          onPressed: () => _confirmar(a, "CONFIRMADA"),
-                          child: const Text("Confirmar"),
-                        ),
-                      ],
-                    ),
-                    onTap: () => _detalle(context, a),
+                      );
+                    },
                   ),
                 );
               },
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
 
-  void _detalle(BuildContext context, Alerta a) {
+  void _detalle(Noti n) {
     showDialog(
       context: context,
-      builder: (_) {
-        return AlertDialog(
-          title: Text("Incidencia: ${a.incidenciaLabel}"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                height: 160,
-                color: Colors.black12,
-                child: const Center(child: Icon(Icons.image, size: 48)),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                "Zona: ${a.zona}\nÁrea: ${a.areacomun}\n"
-                "Hora: ${_fmt(a.fecha)}\n"
-                "Confianza: ${(a.confianza * 100).toStringAsFixed(1)}%\n"
-                "Riesgo: ${a.nivelRiesgoLabel}\n"
-                "Estado: ${a.estado}",
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cerrar"),
-            ),
+      builder: (_) => AlertDialog(
+        title: Text(n.titulo),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Polígono: ${n.poligono}'),
+            const SizedBox(height: 6),
+            Text('Fecha: ${_fmt(n.creadoEn)}'),
+            const SizedBox(height: 12),
+            Text(n.descripcion),
           ],
-        );
-      },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cerrar'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _toggleLeido(n);
+            },
+            child: Text(n.leido ? 'Marcar no leída' : 'Marcar leída'),
+          ),
+        ],
+      ),
     );
   }
 
   String _fmt(DateTime dt) {
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    return '${dt.day}/${dt.month} $h:$m';
-  }
-}
-
-// ===== Modelo Alerta (DetecciónIA) =====
-class Alerta {
-  final int id;
-  final String zona;
-  final String areacomun;
-  final String incidenciaLabel;
-  final String nivelRiesgoLabel;
-  final double confianza;
-  final DateTime fecha;
-  String estado; // UI local: NUEVA, CONFIRMADA, DESCARTADA
-
-  Alerta({
-    required this.id,
-    required this.zona,
-    required this.areacomun,
-    required this.incidenciaLabel,
-    required this.nivelRiesgoLabel,
-    required this.confianza,
-    required this.fecha,
-    this.estado = "NUEVA",
-  });
-
-  factory Alerta.fromJson(Map<String, dynamic> j) {
-    return Alerta(
-      id: j['id'],
-      zona: j['zona'] ?? '',
-      areacomun: j['areacomun'] ?? '',
-      incidenciaLabel: j['incidencia_label'] ?? j['incidencia'],
-      nivelRiesgoLabel: j['nivel_riesgo_label'] ?? j['nivel_riesgo'],
-      confianza: (j['confianza'] as num).toDouble(),
-      fecha: DateTime.parse(j['fechaHora']),
-    );
+    final d =
+        '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
+    final h =
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    return '$d $h';
   }
 }
